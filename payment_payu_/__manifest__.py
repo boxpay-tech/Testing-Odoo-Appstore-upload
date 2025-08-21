@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'PayU Payment Provider',
-    'version': '1.0',
+    'version': '18.0.0.0',
     'category': 'Accounting/Payment Providers',
     'sequence': 350,
     'summary': 'Payment Provider: PayU Integration',
