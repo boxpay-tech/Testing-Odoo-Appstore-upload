@@ -256,62 +256,6 @@ class PaymentTransaction(models.Model):
         # Recompute order totals
         sale_order._compute_amounts()
 
-    def apply_fixed_discount_to_order_lines(self, sale_order, fixed_discount_amount):
-        """
-        Apply a fixed discount amount distributed proportionally to all sale.order lines.
-        The discount is set as a percentage on each line's unit price.
-        
-        :param sale_order: record of sale.order
-        :param fixed_discount_amount: fixed discount amount (float)
-        """
-
-        currency = sale_order.pricelist_id.currency_id
-        rounding = currency.rounding
-
-        # Calculate total amounts - untaxed and tax
-        total_untaxed = sale_order.amount_untaxed
-        total_tax = sale_order.amount_tax
-        total_with_tax = total_untaxed + total_tax
-
-        # Calculate proportion of tax in the total amount
-        tax_ratio = total_tax / total_with_tax  # fraction of final amount that is tax
-
-        # Remove tax proportion from fixed discount to get net discount applicable on untaxed base
-        fixed_discount_amount = fixed_discount_amount * (1 - tax_ratio)
-
-        # Calculate total price before discount on all lines (price_unit * qty)
-        total_amount = sum(line.price_unit * line.product_uom_qty for line in sale_order.order_line)
-
-        if total_amount <= 0:
-            # Avoid division by zero if no lines or zero amount
-            return
-
-        distributed_amount = 0.0
-
-        for line in sale_order.order_line[:-1]:
-            line_subtotal = line.price_unit * line.product_uom_qty
-            proportion = line_subtotal / total_amount
-            line_discount_amount = float_round(fixed_discount_amount * proportion, precision_rounding=rounding)
-
-            # Calculate discount percentage for the line (no rounding here)
-            discount_pct = (line_discount_amount / line_subtotal) * 100 if line_subtotal > 0 else 0.0
-            line.discount = discount_pct
-
-            distributed_amount += line_discount_amount
-
-        # Calculate remainder discount for last line
-        remaining_discount_amount = fixed_discount_amount - distributed_amount
-        last_line = sale_order.order_line[-1]
-        last_line_subtotal = last_line.price_unit * last_line.product_uom_qty
-
-        # Calculate discount percentage for last line
-        last_discount_pct = (remaining_discount_amount / last_line_subtotal) * 100 if last_line_subtotal > 0 else 0.0
-        last_line.discount = float_round(last_discount_pct, precision_rounding=rounding)
-
-        # Recompute order totals (usually automatic, but call if needed)
-        sale_order._compute_amounts()
-
-
     def send_capture_request(self, amount_to_capture=None):
         """
         Override of payment to capture the transaction.
@@ -429,7 +373,6 @@ class PaymentTransaction(models.Model):
 
         if udf3 == 'website':
             sale_order = request.env['sale.order'].sudo().browse(int(sale_order_id))
-            sale_order.sudo().write({'external_discount_amount': discount})
             self.apply_global_discount_to_order(sale_order, discount)
         else:
             # Assuming invoice is linked by name/reference stored in udf1
@@ -441,9 +384,14 @@ class PaymentTransaction(models.Model):
 
 
     def _update_amount_if_present(self, data):
+        additional_charges = data.get('additionalCharges')
         net_amount_debit = data.get('net_amount_debit')
+
+        # Consider additionalCharges as zero if missing or None or empty string
+        additional_charges_value = float(additional_charges) if additional_charges not in (None, '', 'null') else 0.0
+
         if net_amount_debit:
-            self.write({'amount': float(net_amount_debit)})
+            self.write({'amount': float(net_amount_debit) - additional_charges_value})
 
 
     def _handle_failure_status(self, data):
