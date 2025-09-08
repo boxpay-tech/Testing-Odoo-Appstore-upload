@@ -6,7 +6,7 @@
     'sequence': 350,
     'summary': 'Payment Provider: PayU Integration',
     'description': "This module provides the integration of PayU as a payment provider in Odoo.",
-    'icon': '/payment_payu/static/src/description/icon.svg',
+    'icon': '/payment_payu/static/description/icon.svg',
     'author': 'PayU',
     'depends': ['payment'],
     'data': [
